@@ -80,6 +80,15 @@ class AssignmentValue:
         return self.ast_node.lineno
 
 
+class TypeAliasAssignmentValue(AssignmentValue):
+    def __init__(self, type_alias):
+        super().__init__(type_alias.value)
+        self.type_alias = type_alias
+
+    def get_lineno(self):
+        return self.type_alias.lineno
+
+
 class EvaluatedName(PyName):
     """A name whose object will be evaluated later"""
 
@@ -101,6 +110,10 @@ class EvaluatedName(PyName):
 
 
 class ParameterName(PyName):
+    pass
+
+
+class TypeParameterName(PyName):
     pass
 
 

@@ -66,6 +66,8 @@ def create_inline(project, resource, offset):
         raise exceptions.RefactoringError(message)
     if isinstance(pyname, pynames.ImportedName):
         pyname = pyname._get_imported_pyname()
+    if isinstance(pyname, pynames.TypeParameterName):
+        raise exceptions.RefactoringError("Type parameters cannot be inlined.")
     if isinstance(pyname, pynames.AssignedName):
         return InlineVariable(project, resource, offset)
     if isinstance(pyname, pynames.ParameterName):
@@ -245,6 +247,14 @@ class InlineVariable(_Inliner):
         self._init_imports()
 
     def _check_exceptional_conditions(self):
+        # PEP 695 aliases are lazy TypeAliasType objects.  Treating them as
+        # ordinary assignments can make forward references eager, while
+        # generic aliases additionally require type-argument substitution.
+        if any(
+            isinstance(assignment, pynames.TypeAliasAssignmentValue)
+            for assignment in self.pyname.assignments
+        ):
+            raise exceptions.RefactoringError("Type aliases cannot be inlined.")
         if len(self.pyname.assignments) != 1:
             raise exceptions.RefactoringError(
                 "Local variable should be assigned once for inlining."

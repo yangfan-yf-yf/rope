@@ -4,6 +4,7 @@
 - #851 Bump supported python version to up to Python 3.14
 - #852 Implement patchedast handlers for TypeAlias 
 - #853 Implement patchedast handlers TypeVar
+- #862 Support renaming PEP 695 type aliases and reject unsafe inlining (@yangfan-yf-yf)
 - #847 Avoid printing autoimport syntax errors (@yangfan-yf-yf)
 - #819 supports MatchOr, MatchSequence, MatchStar (@jheld)
 

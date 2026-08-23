@@ -164,6 +164,25 @@ class PyClass(pyobjects.PyClass):
         return rope.base.pyscopes.ClassScope(self.pycore, self)
 
 
+class PyTypeAlias(pyobjects.PyDefinedObject):
+    def __init__(self, pycore, ast_node, parent):
+        self.visitor_class = _TypeAliasVisitor
+        super().__init__(pycore, ast_node, parent)
+        self.type_parameters = {
+            parameter.name: pynamesdef.TypeParameterName(self, parameter)
+            for parameter in ast_node.type_params
+        }
+
+    def get_name(self):
+        return self.ast_node.name.id
+
+    def get_type_parameters(self):
+        return self.type_parameters
+
+    def _create_scope(self):
+        return rope.base.pyscopes.TypeAliasScope(self.pycore, self)
+
+
 class PyModule(pyobjects.PyModule):
     def __init__(self, pycore, source=None, resource=None, force_errors=False):
         ignore = pycore.project.prefs.get("ignore_syntax_errors", False)
@@ -454,6 +473,11 @@ class _ScopeVisitor(_ExpressionVisitor):
     def _AugAssign(self, node):
         pass
 
+    def _TypeAlias(self, node):
+        assignment = pynamesdef.TypeAliasAssignmentValue(node)
+        self._assigned(node.name.id, assignment)
+        self.defineds.append(PyTypeAlias(self.pycore, node, self.owner_object))
+
     def _For(self, node):
         self._update_evaluated(node.target, node.iter, ".__iter__().next()")
         for child in node.body + node.orelse:
@@ -613,6 +637,10 @@ class _FunctionVisitor(_ScopeVisitor):
         if node.value is not None:
             self.returned_asts.append(node.value)
         self.generator = True
+
+
+class _TypeAliasVisitor(_ScopeVisitor):
+    pass
 
 
 class _ClassInitVisitor(_AssignVisitor):

@@ -1663,9 +1663,55 @@ class PatchedASTTest(unittest.TestCase):
             "type",
             " ",
             "Name",
-            " = ",
+            " ",
+            "=",
+            " ",
             "Subscript",
         ])
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_generic_type_alias(self):
+        source = "type Alias[T, *Ts, **P] = tuple[T, *Ts]\n"
+        ast_frag = patchedast.get_patched_ast(source, True)
+        checker = _ResultChecker(self, ast_frag)
+
+        checker.check_children(
+            "TypeAlias",
+            [
+                "type",
+                " ",
+                "Name",
+                "",
+                "[",
+                "",
+                "TypeVar",
+                "",
+                ",",
+                " ",
+                "TypeVarTuple",
+                "",
+                ",",
+                " ",
+                "ParamSpec",
+                "",
+                "]",
+                " ",
+                "=",
+                " ",
+                "Subscript",
+            ],
+        )
+        type_alias = ast_frag.body[0]
+        expected_regions = [
+            (source.index("[T") + 1, "T"),
+            (source.index("*Ts"), "*Ts"),
+            (source.index("**P"), "**P"),
+        ]
+        for parameter, (start, text) in zip(
+            type_alias.type_params, expected_regions
+        ):
+            self.assertEqual((start, start + len(text)), parameter.region)
+            self.assertEqual(text, source[slice(*parameter.region)])
 
     @testutils.only_for_versions_higher("3.12")
     def test_type_var_simple(self):

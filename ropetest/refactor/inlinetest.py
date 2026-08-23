@@ -1521,3 +1521,59 @@ class InlineTest(unittest.TestCase):
         """)
         with self.assertRaises(rope.base.exceptions.RefactoringError):
             refactored = self._inline(code, code.index("a_func") + 1)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_refuse_to_inline_non_generic_type_alias(self):
+        code = "type Alias = int\nvalue: Alias\n"
+
+        with self.assertRaisesRegex(
+            rope.base.exceptions.RefactoringError,
+            "Type aliases cannot be inlined",
+        ):
+            self._inline(code, code.index("Alias") + 1)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_refuse_to_inline_lazy_type_alias_with_forward_reference(self):
+        code = dedent("""\
+            type Alias = Later
+            def function(value: Alias):
+                pass
+            class Later:
+                pass
+        """)
+
+        with self.assertRaisesRegex(
+            rope.base.exceptions.RefactoringError,
+            "Type aliases cannot be inlined",
+        ):
+            self._inline(code, code.index("Alias") + 1)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_refuse_to_inline_generic_type_alias(self):
+        code = "type Alias[T] = list[T]\nvalue: Alias[int]\n"
+
+        with self.assertRaisesRegex(
+            rope.base.exceptions.RefactoringError,
+            "Type aliases cannot be inlined",
+        ):
+            self._inline(code, code.index("Alias") + 1)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_refuse_to_inline_recursive_type_alias(self):
+        code = "type Alias = list[Alias]\nvalue: Alias\n"
+
+        with self.assertRaisesRegex(
+            rope.base.exceptions.RefactoringError,
+            "Type aliases cannot be inlined",
+        ):
+            self._inline(code, code.index("Alias") + 1)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_refuse_to_inline_type_parameter(self):
+        code = "type Alias[T] = list[T]\nvalue: Alias[int]\n"
+
+        with self.assertRaisesRegex(
+            rope.base.exceptions.RefactoringError,
+            "Type parameters cannot be inlined",
+        ):
+            self._inline(code, code.index("[T]") + 1)

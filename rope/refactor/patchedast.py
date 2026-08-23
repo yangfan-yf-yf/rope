@@ -843,7 +843,10 @@ class _PatchingASTWalker:
         self._handle(node, children)
 
     def _TypeAlias(self, node):
-        children = ["type", node.name, node.value]
+        children = ["type", node.name]
+        if node.type_params:
+            children.extend(["[", *self._child_nodes(node.type_params, ","), "]"])
+        children.extend(["=", node.value])
         self._handle(node, children)
 
     def _TypeVar(self, node):

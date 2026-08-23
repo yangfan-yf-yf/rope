@@ -262,6 +262,52 @@ class ClassScope(Scope):
         return {}
 
 
+class TypeAliasScope(Scope):
+    def __init__(self, pycore, pyobject):
+        super().__init__(pycore, pyobject, pyobject.parent.get_scope())
+
+    def get_names(self):
+        return self.pyobject.get_type_parameters()
+
+    def get_defined_names(self):
+        return self.get_names()
+
+    def lookup(self, name):
+        if name in self.get_names():
+            return self.get_names()[name]
+        if isinstance(self.parent, ClassScope):
+            if name in self.parent.get_defined_names():
+                return self.parent.get_defined_names()[name]
+            if self.parent.parent is not None:
+                return self.parent.parent._propagated_lookup(name)
+            return None
+        if self.parent is not None:
+            return self.parent._propagated_lookup(name)
+        return None
+
+    def get_body_start(self):
+        return self.get_start()
+
+    def get_end(self):
+        node = self.pyobject.get_ast()
+        return getattr(node, "end_lineno", node.lineno)
+
+    end = property(get_end)
+
+    def get_logical_end(self):
+        return self.get_end()
+
+    logical_end = property(get_logical_end)
+
+    def get_kind(self):
+        return "TypeAlias"
+
+    def get_region(self):
+        self._calculate_scope_regions_for_module()
+        node = self.pyobject.get_ast()
+        return (patchedast.node_region(node.name)[1], patchedast.node_region(node)[1])
+
+
 class _HoldingScopeFinder:
     def __init__(self, pymodule):
         self.pymodule = pymodule

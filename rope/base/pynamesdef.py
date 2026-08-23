@@ -62,7 +62,23 @@ class ParameterName(pynames.ParameterName):
         return (self.pyfunction.get_module(), self.pyfunction.get_ast().lineno)
 
 
+class TypeParameterName(pynames.TypeParameterName):
+    def __init__(self, pytypealias, ast_node):
+        self.pytypealias = pytypealias
+        self.ast_node = ast_node
+
+    def get_object(self):
+        return rope.base.pyobjects.get_unknown()
+
+    def get_definition_location(self):
+        return (self.pytypealias.get_module(), self.ast_node.lineno)
+
+
 class AssignmentValue(pynames.AssignmentValue):
+    pass
+
+
+class TypeAliasAssignmentValue(pynames.TypeAliasAssignmentValue):
     pass
 
 

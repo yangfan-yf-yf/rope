@@ -1,10 +1,10 @@
 import sys
 import unittest
 from textwrap import dedent
-from rope.base import exceptions
 
 import rope.base.codeanalyze
 import rope.refactor.occurrences
+from rope.base import exceptions
 from rope.refactor import rename
 from rope.refactor.rename import Rename
 from ropetest import testutils
@@ -1412,6 +1412,213 @@ class RenameRefactoringTest(RenameTestMixin, unittest.TestCase):
             not mod1.exists() and self.project.find_module("new_json.utils") is not None
         )
         self.assertEqual("import new_json.utils.a as stdlib_json_utils\n", mod2.read())
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_type_alias_from_definition(self):
+        code = "type Alias = int\nvalue: Alias\n"
+
+        refactored = self._local_rename(code, code.index("Alias") + 1, "Renamed")
+
+        self.assertEqual("type Renamed = int\nvalue: Renamed\n", refactored)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_type_alias_from_use(self):
+        code = "type Alias = int\nvalue: Alias\n"
+
+        refactored = self._local_rename(code, code.rindex("Alias") + 1, "Renamed")
+
+        self.assertEqual("type Renamed = int\nvalue: Renamed\n", refactored)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_multiline_type_alias_from_definition(self):
+        code = dedent("""\
+            type Alias = (
+                int
+            )
+            value: Alias
+        """)
+
+        refactored = self._local_rename(code, code.index("Alias") + 1, "Renamed")
+
+        self.assertEqual(
+            dedent("""\
+                type Renamed = (
+                    int
+                )
+                value: Renamed
+            """),
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_type_alias_parameter_does_not_rename_outer_name(self):
+        code = dedent("""\
+            T = "outer"
+            type Alias[T] = tuple[T]
+            print(T)
+        """)
+
+        refactored = self._local_rename(
+            code, code.index("[T]") + 1, "Element"
+        )
+
+        self.assertEqual(
+            dedent("""\
+                T = "outer"
+                type Alias[Element] = tuple[Element]
+                print(T)
+            """),
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_type_alias_parameter_in_bounds_and_value(self):
+        code = "type Alias[T: U, U, *Ts, **P] = tuple[T, U, *Ts, P]\n"
+
+        refactored = self._local_rename(
+            code, code.index("U, U") + 1, "Bound"
+        )
+
+        self.assertEqual(
+            "type Alias[T: Bound, Bound, *Ts, **P] = "
+            "tuple[T, Bound, *Ts, P]\n",
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_type_var_tuple_parameter(self):
+        code = "type Alias[T: U, U, *Ts, **P] = tuple[T, U, *Ts, P]\n"
+
+        refactored = self._local_rename(
+            code, code.index("*Ts") + 1, "Elements"
+        )
+
+        self.assertEqual(
+            "type Alias[T: U, U, *Elements, **P] = "
+            "tuple[T, U, *Elements, P]\n",
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_param_spec_parameter(self):
+        code = "type Alias[T: U, U, *Ts, **P] = tuple[T, U, *Ts, P]\n"
+
+        refactored = self._local_rename(code, code.index("**P") + 2, "Params")
+
+        self.assertEqual(
+            "type Alias[T: U, U, *Ts, **Params] = "
+            "tuple[T, U, *Ts, Params]\n",
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_parameters_of_separate_aliases_are_independent(self):
+        code = dedent("""\
+            type First[T] = list[T]
+            type Second[T] = set[T]
+        """)
+
+        refactored = self._local_rename(
+            code, code.index("[T]") + 1, "Element"
+        )
+
+        self.assertEqual(
+            dedent("""\
+                type First[Element] = list[Element]
+                type Second[T] = set[T]
+            """),
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_comprehension_target_shadows_type_alias_parameter(self):
+        code = "type Alias[T] = [T for T in (int, str)]\n"
+
+        refactored = self._local_rename(
+            code, code.index("[T]") + 1, "Element"
+        )
+
+        self.assertEqual(
+            "type Alias[Element] = [T for T in (int, str)]\n",
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_alias_name_does_not_rename_same_named_type_parameter(self):
+        code = "type T[T] = list[T]\nvalue: T[int]\n"
+
+        refactored = self._local_rename(code, code.index("T[") + 1, "Alias")
+
+        self.assertEqual(
+            "type Alias[T] = list[T]\nvalue: Alias[int]\n", refactored
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_parameter_does_not_rename_same_named_alias(self):
+        code = "type T[T] = list[T]\nvalue: T[int]\n"
+
+        refactored = self._local_rename(
+            code, code.index("[T]") + 1, "Element"
+        )
+
+        self.assertEqual(
+            "type T[Element] = list[Element]\nvalue: T[int]\n",
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_renaming_recursive_type_alias(self):
+        code = "type Tree = int | list[Tree]\nvalue: Tree\n"
+
+        refactored = self._local_rename(code, code.index("Tree") + 1, "Node")
+
+        self.assertEqual("type Node = int | list[Node]\nvalue: Node\n", refactored)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_alias_parameter_does_not_leak_from_function(self):
+        code = dedent("""\
+            T = int
+            def function():
+                type Alias[T] = list[T]
+                return T
+        """)
+
+        refactored = self._local_rename(
+            code, code.index("[T]") + 1, "Element"
+        )
+
+        self.assertEqual(
+            dedent("""\
+                T = int
+                def function():
+                    type Alias[Element] = list[Element]
+                    return T
+            """),
+            refactored,
+        )
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_alias_in_class_uses_class_namespace(self):
+        code = dedent("""\
+            class Container:
+                Inner = int
+                type Alias = list[Inner]
+            value = Container.Inner
+        """)
+
+        refactored = self._local_rename(
+            code, code.index("Inner") + 1, "Element"
+        )
+
+        self.assertEqual(
+            dedent("""\
+                class Container:
+                    Element = int
+                    type Alias = list[Element]
+                value = Container.Element
+            """),
+            refactored,
+        )
 
     def test_rename_refuses_renaming_to_python_keyword(self):
         with self.assertRaises(exceptions.RefactoringError, msg="Invalid refactoring target name. 'class' is a Python keyword."):

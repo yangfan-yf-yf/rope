@@ -1,7 +1,7 @@
 import unittest
 from textwrap import dedent
 
-from rope.base import libutils
+from rope.base import libutils, pynames
 from rope.base.pyobjects import get_base_type
 from ropetest import testutils
 
@@ -560,3 +560,74 @@ class PyCoreScopesTest(unittest.TestCase):
         )
 
         self.assertEqual(scope.get_scopes()[1].get_region(), (26, 47))
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_alias_scope_contains_only_type_parameters(self):
+        scope = libutils.get_string_scope(
+            self.project, "type Alias[T, *Ts, **P] = tuple[T, *Ts]\n"
+        )
+
+        self.assertIn("Alias", scope)
+        self.assertNotIn("T", scope)
+        self.assertNotIn("Ts", scope)
+        self.assertNotIn("P", scope)
+        alias_scope = scope.get_scopes()[0]
+        self.assertEqual("TypeAlias", alias_scope.get_kind())
+        self.assertEqual({"P", "T", "Ts"}, set(alias_scope.get_defined_names()))
+        self.assertIsInstance(alias_scope["T"], pynames.TypeParameterName)
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_alias_parameter_shadows_outer_name(self):
+        scope = libutils.get_string_scope(
+            self.project,
+            dedent("""\
+                T = int
+                type Alias[T] = list[T]
+            """),
+        )
+
+        alias_scope = scope.get_scopes()[0]
+        self.assertIsNot(scope["T"], alias_scope["T"])
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_comprehension_target_shadows_type_alias_parameter(self):
+        scope = libutils.get_string_scope(
+            self.project,
+            "type Alias[T] = [T for T in (int, str)]\n",
+        )
+
+        alias_scope = scope.get_scopes()[0]
+        comprehension_scope = alias_scope.get_scopes()[0]
+        self.assertIsNot(alias_scope["T"], comprehension_scope["T"])
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_alias_scope_can_see_enclosing_class_namespace(self):
+        scope = libutils.get_string_scope(
+            self.project,
+            dedent("""\
+                class Container:
+                    Inner = int
+                    type Alias = list[Inner]
+            """),
+        )
+
+        class_scope = scope.get_scopes()[0]
+        alias_scope = class_scope.get_scopes()[0]
+        self.assertIs(class_scope["Inner"], alias_scope.lookup("Inner"))
+
+    @testutils.only_for_versions_higher("3.12")
+    def test_type_alias_scope_excludes_alias_definition_name(self):
+        code = "type T[T] = list[T]\nvalue: T[int]\n"
+        pymodule = libutils.get_string_module(self.project, code)
+        module_scope = pymodule.get_scope()
+
+        alias_name_offset = code.index("T[")
+        parameter_offset = code.index("[T]") + 1
+        self.assertIs(
+            module_scope["T"],
+            module_scope.get_inner_scope_for_offset(alias_name_offset).lookup("T"),
+        )
+        self.assertIsNot(
+            module_scope["T"],
+            module_scope.get_inner_scope_for_offset(parameter_offset).lookup("T"),
+        )
