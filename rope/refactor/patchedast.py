@@ -813,27 +813,35 @@ class _PatchingASTWalker:
                 *closing_paren,
             ]
         else:
-            node_start = (node.lineno, node.col_offset)
-            node_end = (node.end_lineno, node.end_col_offset)
-            children = [self.lines[node_start:node_end]]
+            node_start = self._get_ast_offset(node.lineno, node.col_offset)
+            node_end = self._get_ast_offset(node.end_lineno, node.end_col_offset)
+            children = [self.source.source[node_start:node_end]]
         self._handle(node, children)
 
+    def _get_ast_offset(self, lineno, col_offset):
+        # AST columns count UTF-8 bytes; source slices count Unicode characters.
+        line = self.lines.get_line(lineno)
+        prefix = line.encode("utf-8")[:col_offset].decode("utf-8")
+        return self.lines.get_line_start(lineno) + len(prefix)
+
     def _get_surrounding_parens(self, node: ast.MatchSequence):
-        node_start = (node.lineno, node.col_offset)
-        first_pattern_start = (node.patterns[0].lineno, node.patterns[0].col_offset)
-        opening_paren = self.lines[node_start:first_pattern_start].strip()
+        node_start = self._get_ast_offset(node.lineno, node.col_offset)
+        first_pattern_start = self._get_ast_offset(
+            node.patterns[0].lineno, node.patterns[0].col_offset
+        )
+        opening_paren = self.source.source[node_start:first_pattern_start].strip()
         if opening_paren not in ["[", "(", ""]:
             warnings.warn(
                 f"Unexpected character in MatchSequence's opening_paren <{opening_paren}>; please report!",
                 RuntimeWarning,
             )
 
-        last_pattern_end = (
+        last_pattern_end = self._get_ast_offset(
             node.patterns[-1].end_lineno,
             node.patterns[-1].end_col_offset,
         )
-        node_end = (node.end_lineno, node.end_col_offset)
-        closing_paren = self.lines[last_pattern_end:node_end].strip()
+        node_end = self._get_ast_offset(node.end_lineno, node.end_col_offset)
+        closing_paren = self.source.source[last_pattern_end:node_end].strip()
         if closing_paren not in ["]", ")", ""]:
             warnings.warn(
                 f"Unexpected character in MatchSequence's closing_paren <{closing_paren}>; please report!",

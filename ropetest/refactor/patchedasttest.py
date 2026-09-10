@@ -1558,6 +1558,29 @@ class PatchedASTTest(unittest.TestCase):
         ])
 
     @testutils.only_for_versions_higher("3.10")
+    def test_match_sequence_with_non_ascii_text(self):
+        patterns = [
+            "[é, y]",
+            "('你好', y)",
+            "['é', [x, y]]",
+            "['é', []]",
+            "['é', ()]",
+            "'é', [x, y]",
+            "[\n        'é', [x, y]\n    ]",
+        ]
+        for pattern in patterns:
+            with self.subTest(pattern=pattern):
+                source = f"match value:\n    case {pattern}:\n        pass\n"
+                ast_frag = patchedast.get_patched_ast(source, True)
+                self.assertEqual(source, patchedast.write_ast(ast_frag))
+                for node in ast.walk(ast_frag):
+                    if isinstance(node, ast.MatchSequence):
+                        self.assertEqual(
+                            ast.get_source_segment(source, node),
+                            source[node.region[0]:node.region[1]],
+                        )
+
+    @testutils.only_for_versions_higher("3.10")
     def test_match_node_with_match_sequence_empty_round_parens(self):
         source = dedent("""\
             match x:
